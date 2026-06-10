@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 REQUEST_HEADER = bytes((0xA5, 0x5A))
 RESPONSE_HEADER = bytes((0x5A, 0xA5))
-FUNCTION_LED_CURRENT_ADC = 0x02
+FUNCTION_LED_ILLUMINANCE_ADC = 0x02
 CHANNEL_MIN = 0x01
 CHANNEL_MAX = 0x10
 ADC_VALUE_COUNT = 16
@@ -24,7 +24,7 @@ class ChannelReading:
     """单个通道的一次采集结果。"""
 
     channel: int
-    currents_ma: tuple[float, ...]
+    illuminance_lux: tuple[float, ...]
 
 
 def checksum(frame_without_checksum: bytes) -> int:
@@ -33,7 +33,7 @@ def checksum(frame_without_checksum: bytes) -> int:
 
 
 def build_read_adc_request(channel: int) -> bytes:
-    """生成读取指定通道 LED 电流 ADC 的请求帧。
+    """生成读取指定通道 LED 光照强度 ADC 的请求帧。
 
     帧格式来自协议表：
     A5 5A XX 02 02 00 00 SUM
@@ -43,7 +43,7 @@ def build_read_adc_request(channel: int) -> bytes:
         (
             *REQUEST_HEADER,
             channel,
-            FUNCTION_LED_CURRENT_ADC,
+            FUNCTION_LED_ILLUMINANCE_ADC,
             0x02,
             0x00,
             0x00,
@@ -53,7 +53,7 @@ def build_read_adc_request(channel: int) -> bytes:
 
 
 def parse_adc_response(frame: bytes | bytearray, expected_channel: int | None = None) -> ChannelReading:
-    """解析主板返回的 LED 电流 ADC 数据帧。
+    """解析主板返回的 LED 光照强度 ADC 数据帧。
 
     返回帧格式：
     5A A5 XX 02 40 + 16 个大端 float + SUM
@@ -77,7 +77,7 @@ def parse_adc_response(frame: bytes | bytearray, expected_channel: int | None = 
         raise ProtocolError(f"Unexpected channel: got {channel}, expected {expected_channel}")
 
     function_code = raw[3]
-    if function_code != FUNCTION_LED_CURRENT_ADC:
+    if function_code != FUNCTION_LED_ILLUMINANCE_ADC:
         raise ProtocolError(f"Unexpected function code: 0x{function_code:02X}")
 
     payload_length = raw[4]
@@ -98,9 +98,9 @@ def parse_adc_response(frame: bytes | bytearray, expected_channel: int | None = 
 
     payload_start = 5
     payload_end = payload_start + payload_length
-    # 每个 LED 电流值占 4 字节，当前按 IEEE754 大端 float 解析，单位暂定 mA。
+    # 每个 LED 光照强度值占 4 字节，当前按 IEEE754 大端 float 解析，单位 lux。
     values = struct.unpack(f"{FLOAT_ENDIAN}{ADC_VALUE_COUNT}f", raw[payload_start:payload_end])
-    return ChannelReading(channel=channel, currents_ma=tuple(values))
+    return ChannelReading(channel=channel, illuminance_lux=tuple(values))
 
 
 def _validate_channel(channel: int) -> None:

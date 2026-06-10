@@ -21,7 +21,7 @@ CURVE_LINE_COLOR = "#1d4ed8"
 
 
 class CurvePlotPanel(AcrylicPanel):
-    """右侧 LED 电流历史曲线面板。"""
+    """右侧 LED 光照强度历史曲线面板。"""
 
     def __init__(self, settings: AppSettings) -> None:
         super().__init__(radius=20, top_alpha=118, bottom_alpha=88)
@@ -32,7 +32,7 @@ class CurvePlotPanel(AcrylicPanel):
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(12)
 
-        self.curve_title = QLabel("LED电流 1 实时曲线")
+        self.curve_title = QLabel("光照强度 1 实时曲线")
         self.curve_title.setObjectName("curveTitle")
 
         self.plot_widget = pg.PlotWidget(axisItems={"bottom": pg.DateAxisItem(orientation="bottom")})
@@ -42,7 +42,7 @@ class CurvePlotPanel(AcrylicPanel):
         self.plot_widget.setStyleSheet("background: transparent; border: none;")
         self.plot_widget.viewport().setStyleSheet("background: transparent;")
         self.plot_widget.showGrid(x=self.settings.curve_show_grid, y=self.settings.curve_show_grid, alpha=CURVE_GRID_ALPHA)
-        self.plot_widget.setLabel("left", "电流值", units="mA", color=CURVE_TICK_COLOR)
+        self.plot_widget.setLabel("left", "光照强度", units="lux", color=CURVE_TICK_COLOR)
         self.plot_widget.setLabel("bottom", "时间", color=CURVE_TICK_COLOR)
         self.plot_widget.setMouseEnabled(x=False, y=False)
         self.plot_widget.getPlotItem().setMenuEnabled(False)
@@ -67,7 +67,7 @@ class CurvePlotPanel(AcrylicPanel):
 
     def set_selected_led(self, led_index: int) -> None:
         """更新曲线标题中的 LED 序号。"""
-        self.curve_title.setText(f"LED电流 {led_index} 实时曲线")
+        self.curve_title.setText(f"光照强度 {led_index} 实时曲线")
 
     def apply_settings(self, settings: AppSettings) -> None:
         """应用曲线显示设置。"""
@@ -98,7 +98,7 @@ class CurvePlotPanel(AcrylicPanel):
         window_start = latest_timestamp - curve_visible_seconds
         visible_points = [point for point in points if point.timestamp >= window_start]
         x_values = [point.timestamp for point in visible_points]
-        y_values = [point.value_ma for point in visible_points]
+        y_values = [point.value_lux for point in visible_points]
         self.plot_curve.setData(x_values, y_values, antialias=False, stepMode=CURVE_STEP_MODE)
         self.plot_widget.setXRange(window_start, latest_timestamp, padding=0)
         self._apply_curve_y_range(y_values)
@@ -137,5 +137,5 @@ class CurvePlotPanel(AcrylicPanel):
         self.plot_widget.setYRange(minimum - padding, maximum + padding, padding=0)
 
     def _auto_y_single_value_padding(self, value: float) -> float:
-        """稳定电流值时给很小边距，避免 20mA 被放大到十几到二十几。"""
+        """稳定光照强度值时给很小边距，避免稳定值被视觉放大。"""
         return max(abs(value) * AUTO_Y_SINGLE_VALUE_RATIO, AUTO_Y_MIN_PADDING)

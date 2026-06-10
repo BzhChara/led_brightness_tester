@@ -72,7 +72,7 @@ class ContinuousRecorder:
         self._closed = False
         self._open_temp_files()
 
-    def record_channel_reading(self, channel: int, values_ma: tuple[float, ...], timestamp: float) -> int:
+    def record_channel_reading(self, channel: int, values_lux: tuple[float, ...], timestamp: float) -> int:
         """记录达到保存间隔的一组通道数据，返回新增行数。"""
         if self._closed:
             raise RuntimeError("Recorder is closed")
@@ -85,9 +85,9 @@ class ContinuousRecorder:
 
         self._next_timestamp_by_channel[channel] = timestamp + self.interval_seconds
         rows_added = 0
-        for led_index, value_ma in enumerate(values_ma[: len(EXPORT_LEDS)], start=1):
+        for led_index, value_lux in enumerate(values_lux[: len(EXPORT_LEDS)], start=1):
             writer = self._writers[(channel, led_index)]
-            writer.writer.writerow([repr(timestamp), repr(value_ma)])
+            writer.writer.writerow([repr(timestamp), repr(value_lux)])
             rows_added += 1
         for led_index in EXPORT_LEDS:
             self._writers[(channel, led_index)].file.flush()
@@ -106,7 +106,7 @@ class ContinuousRecorder:
             channel_dir.mkdir(parents=True, exist_ok=True)
             for led_index in EXPORT_LEDS:
                 points = self._read_temp_points(channel, led_index)
-                write_history_xlsx(channel_dir / f"LED电流{led_index}.xlsx", points)
+                write_history_xlsx(channel_dir / f"光照强度{led_index}.xlsx", points)
                 files_written += 1
                 rows_written += len(points)
         return ExportSummary(output_dir=self.output_dir, files_written=files_written, rows_written=rows_written)
@@ -126,7 +126,7 @@ class ContinuousRecorder:
                 for led_index in EXPORT_LEDS:
                     file = self._temp_csv_path(channel, led_index).open("w", newline="", encoding="utf-8")
                     writer = csv.writer(file)
-                    writer.writerow(["timestamp", "value_ma"])
+                    writer.writerow(["timestamp", "value_lux"])
                     self._writers[(channel, led_index)] = _TempCsvWriter(file=file, writer=writer)
         except OSError:
             self.close()
@@ -138,8 +138,8 @@ class ContinuousRecorder:
         with path.open("r", newline="", encoding="utf-8") as file:
             reader = csv.DictReader(file)
             for row in reader:
-                points.append(HistoryPoint(float(row["timestamp"]), float(row["value_ma"])))
+                points.append(HistoryPoint(float(row["timestamp"]), float(row["value_lux"])))
         return points
 
     def _temp_csv_path(self, channel: int, led_index: int) -> Path:
-        return self.temp_dir / f"通道{channel}_LED电流{led_index}.csv"
+        return self.temp_dir / f"通道{channel}_光照强度{led_index}.csv"

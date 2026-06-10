@@ -125,11 +125,11 @@ def format_timestamp(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp).strftime("%H:%M:%S.%f")[:-3]
 
 
-def format_current_value(value_ma: float) -> str:
-    """按文本导出电流值，避免 Excel 自动缩短小数显示。"""
-    if not isfinite(value_ma):
-        return f"{value_ma:g}"
-    return str(value_ma)
+def format_illuminance_value(value_lux: float) -> str:
+    """按文本导出光照强度值，避免 Excel 自动缩短小数显示。"""
+    if not isfinite(value_lux):
+        return f"{value_lux:g}"
+    return str(value_lux)
 
 
 def _latest_timestamp(data_store: DataStore) -> float | None:
@@ -146,7 +146,7 @@ def _latest_timestamp(data_store: DataStore) -> float | None:
 
 
 def _xlsx_path(output_dir: Path, channel: int, led_index: int) -> Path:
-    return output_dir / f"通道{channel}" / f"LED电流{led_index}.xlsx"
+    return output_dir / f"通道{channel}" / f"光照强度{led_index}.xlsx"
 
 
 def write_history_xlsx(path: Path, points: list[HistoryPoint]) -> None:
@@ -157,14 +157,14 @@ def write_history_xlsx(path: Path, points: list[HistoryPoint]) -> None:
 def _write_xlsx(path: Path, points: list[HistoryPoint]) -> None:
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "LED电流"
+    sheet.title = "光照强度"
     sheet.column_dimensions["A"].width = 24
     sheet.column_dimensions["B"].width = 22
 
     header_font = Font(name=EXCEL_FONT_NAME, bold=True)
     body_font = Font(name=EXCEL_FONT_NAME)
     sheet["A1"] = "时间"
-    sheet["B1"] = "电流值(mA)"
+    sheet["B1"] = "光照强度(lux)"
     sheet["A1"].font = header_font
     sheet["B1"].font = header_font
 
@@ -173,7 +173,7 @@ def _write_xlsx(path: Path, points: list[HistoryPoint]) -> None:
         time_cell.number_format = "@"
         time_cell.font = body_font
 
-        value_cell = sheet.cell(row=row_index, column=2, value=format_current_value(point.value_ma))
+        value_cell = sheet.cell(row=row_index, column=2, value=format_illuminance_value(point.value_lux))
         value_cell.number_format = "@"
         value_cell.font = body_font
 

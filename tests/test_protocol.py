@@ -4,7 +4,7 @@ import pytest
 
 from led_debugger.protocol import (
     ADC_PAYLOAD_LENGTH,
-    FUNCTION_LED_CURRENT_ADC,
+    FUNCTION_LED_ILLUMINANCE_ADC,
     RESPONSE_HEADER,
     ProtocolError,
     build_read_adc_request,
@@ -16,7 +16,7 @@ from led_debugger.protocol import (
 def make_adc_response(channel: int, values: list[float]) -> bytes:
     """构造一帧合法的 ADC 返回帧，供协议解析测试使用。"""
     payload = struct.pack(">16f", *values)
-    frame = bytes((*RESPONSE_HEADER, channel, FUNCTION_LED_CURRENT_ADC, ADC_PAYLOAD_LENGTH)) + payload
+    frame = bytes((*RESPONSE_HEADER, channel, FUNCTION_LED_ILLUMINANCE_ADC, ADC_PAYLOAD_LENGTH)) + payload
     return frame + bytes((checksum(frame),))
 
 
@@ -34,7 +34,7 @@ def test_parse_adc_response_reads_big_endian_float_values() -> None:
     reading = parse_adc_response(make_adc_response(3, values), expected_channel=3)
 
     assert reading.channel == 3
-    assert reading.currents_ma == pytest.approx(values)
+    assert reading.illuminance_lux == pytest.approx(values)
 
 
 def test_parse_adc_response_rejects_wrong_checksum() -> None:

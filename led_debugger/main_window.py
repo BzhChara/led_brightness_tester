@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
         apply_shadow(top_bar, blur_radius=30, y_offset=10, alpha=24)
         root_layout.addWidget(top_bar)
 
-        # 主内容面板：左侧为 4x4 LED 电流卡片，右侧为选中 LED 的曲线区域。
+        # 主内容面板：左侧为 4x4 LED 光照强度卡片，右侧为选中 LED 的曲线区域。
         content = AcrylicPanel(radius=26, top_alpha=142, bottom_alpha=104)
         content.setObjectName("contentPanel")
         content_layout = QVBoxLayout(content)
@@ -734,7 +734,7 @@ class MainWindow(QMainWindow):
         self.display_decimals_row = SettingInputRow(
             "DISPLAY_DECIMALS",
             "显示小数位数",
-            "LED 电流卡片显示的小数位数量。范围 0 到 6。",
+            "LED 光照强度卡片显示的小数位数量。范围 0 到 6。",
             self._format_int(self.settings.display_decimals),
             decimals_validator,
         )
@@ -1589,12 +1589,12 @@ class MainWindow(QMainWindow):
         self.connect_button.setEnabled(False)
         self.serial_poller.stop()
 
-    def _handle_reading_received(self, channel: int, currents_ma: tuple[float, ...]) -> None:
+    def _handle_reading_received(self, channel: int, illuminance_lux: tuple[float, ...]) -> None:
         """接收后台线程推送的最新通道数据，并刷新当前页面。"""
         sample_time = time()
-        self.data_store.add_channel_reading(channel, currents_ma, timestamp=sample_time)
+        self.data_store.add_channel_reading(channel, illuminance_lux, timestamp=sample_time)
         if self.continuous_recorder is not None:
-            rows_added = self.continuous_recorder.record_channel_reading(channel, currents_ma, sample_time)
+            rows_added = self.continuous_recorder.record_channel_reading(channel, illuminance_lux, sample_time)
             if rows_added:
                 self.status_label.setText(
                     f"状态：连续记录中，共 {self.continuous_recorder.rows_written} 行，到 "
@@ -1629,7 +1629,7 @@ class MainWindow(QMainWindow):
         """用当前通道最新值刷新 16 个 LED 卡片。"""
         values = self.data_store.get_latest(self.current_channel)
         for index, card in enumerate(self.led_cards):
-            card.set_current_value(values[index] if values is not None else None)
+            card.set_illuminance_value(values[index] if values is not None else None)
 
     def _update_curve(self) -> None:
         """刷新当前通道、当前 LED 的实时历史曲线。"""

@@ -12,7 +12,7 @@ class HistoryPoint:
     """单个历史采样点，timestamp 使用系统 Unix 时间戳。"""
 
     timestamp: float
-    value_ma: float
+    value_lux: float
 
 
 class DataStore:
@@ -32,14 +32,14 @@ class DataStore:
     def add_channel_reading(
         self,
         channel: int,
-        values_ma: tuple[float, ...],
+        values_lux: tuple[float, ...],
         timestamp: float | None = None,
     ) -> None:
         """写入一个通道的 16 路数据，并同步追加每路 LED 的历史点。"""
         sample_time = time() if timestamp is None else timestamp
-        self.latest_readings[channel] = values_ma
-        for led_index, value_ma in enumerate(values_ma, start=1):
-            self._history[(channel, led_index)].append(HistoryPoint(sample_time, value_ma))
+        self.latest_readings[channel] = values_lux
+        for led_index, value_lux in enumerate(values_lux, start=1):
+            self._history[(channel, led_index)].append(HistoryPoint(sample_time, value_lux))
 
     def get_latest(self, channel: int) -> tuple[float, ...] | None:
         """获取指定通道的最新 16 路数据。"""

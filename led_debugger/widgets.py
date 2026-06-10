@@ -395,7 +395,7 @@ class AcrylicSelectButton(AcrylicTextButton):
 
 
 class LedCard(AnimatedButtonMixin, QPushButton):
-    """单个 LED 电流显示卡片。"""
+    """单个 LED 光照强度显示卡片。"""
 
     def __init__(self, led_index: int) -> None:
         super().__init__()
@@ -406,27 +406,27 @@ class LedCard(AnimatedButtonMixin, QPushButton):
         self.setMinimumSize(132, 104)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._hovered = False
-        self._value_text = "--.-- mA"
-        self._current_value_ma: float | None = None
+        self._value_text = "--.-- lux"
+        self._illuminance_lux: float | None = None
         self._decimal_places = DEFAULT_DISPLAY_DECIMALS
         self._shadow = apply_shadow(self, blur_radius=18, y_offset=4, alpha=22)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._init_button_animation()
         self.toggled.connect(lambda _checked: self._refresh_shadow())
-        self.set_current_value(None)
+        self.set_illuminance_value(None)
         self._refresh_shadow()
 
-    def set_current_value(self, value_ma: float | None) -> None:
-        """更新卡片内显示的电流值。"""
-        self._current_value_ma = value_ma
-        self._value_text = "--.-- mA" if value_ma is None else f"{value_ma:.{self._decimal_places}f} mA"
-        self.setText(f"LED电流 {self.led_index}\n{self._value_text}")
+    def set_illuminance_value(self, value_lux: float | None) -> None:
+        """更新卡片内显示的光照强度值。"""
+        self._illuminance_lux = value_lux
+        self._value_text = "--.-- lux" if value_lux is None else f"{value_lux:.{self._decimal_places}f} lux"
+        self.setText(f"光照强度 {self.led_index}\n{self._value_text}")
         self.update()
 
     def set_decimal_places(self, decimal_places: int) -> None:
         """调整显示小数位数，并用当前值刷新文本。"""
         self._decimal_places = decimal_places
-        self.set_current_value(self._current_value_ma)
+        self.set_illuminance_value(self._illuminance_lux)
 
     def enterEvent(self, event) -> None:  # noqa: N802 - Qt 事件函数沿用 Qt 命名。
         self._hovered = True
@@ -511,7 +511,7 @@ class LedCard(AnimatedButtonMixin, QPushButton):
 
         painter.setPen(QColor("#0f172a"))
         painter.setFont(title_font)
-        painter.drawText(text_rect.adjusted(12, 16, -12, -text_rect.height() * 0.48), Qt.AlignHCenter | Qt.AlignTop, f"LED电流 {self.led_index}")
+        painter.drawText(text_rect.adjusted(12, 16, -12, -text_rect.height() * 0.48), Qt.AlignHCenter | Qt.AlignTop, f"光照强度 {self.led_index}")
 
         painter.setFont(value_font)
         painter.drawText(text_rect.adjusted(12, text_rect.height() * 0.33, -12, -12), Qt.AlignCenter, self._value_text)

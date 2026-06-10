@@ -2,7 +2,7 @@ from datetime import datetime
 
 from openpyxl import load_workbook
 
-from led_debugger.exporter import format_current_value, format_timestamp
+from led_debugger.exporter import format_illuminance_value, format_timestamp
 from led_debugger.recorder import ContinuousRecorder, TEMP_CSV_DIR_NAME, default_recording_dir, prepare_recording_dir
 
 
@@ -36,18 +36,18 @@ def test_continuous_recorder_writes_interval_samples_and_exports_xlsx(tmp_path) 
     assert summary.output_dir == output_dir
     assert summary.files_written == 256
     assert summary.rows_written == 32
-    assert (output_dir / TEMP_CSV_DIR_NAME / "通道1_LED电流1.csv").exists()
+    assert (output_dir / TEMP_CSV_DIR_NAME / "通道1_光照强度1.csv").exists()
 
-    workbook = load_workbook(output_dir / "通道1" / "LED电流1.xlsx")
+    workbook = load_workbook(output_dir / "通道1" / "光照强度1.xlsx")
     sheet = workbook.active
     assert sheet["A1"].value == "时间"
-    assert sheet["B1"].value == "电流值(mA)"
+    assert sheet["B1"].value == "光照强度(lux)"
     assert sheet["A2"].value == format_timestamp(100.0)
-    assert sheet["B2"].value == format_current_value(0.0950616002082825)
+    assert sheet["B2"].value == format_illuminance_value(0.0950616002082825)
     assert sheet["A3"].value == format_timestamp(101.2)
-    assert sheet["B3"].value == format_current_value(0.0950616002082825 + 2.0)
+    assert sheet["B3"].value == format_illuminance_value(0.0950616002082825 + 2.0)
 
-    empty_workbook = load_workbook(output_dir / "通道16" / "LED电流16.xlsx")
+    empty_workbook = load_workbook(output_dir / "通道16" / "光照强度16.xlsx")
     empty_sheet = empty_workbook.active
     assert empty_sheet["A1"].value == "时间"
     assert empty_sheet["A2"].value is None

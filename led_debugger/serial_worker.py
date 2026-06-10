@@ -57,7 +57,7 @@ class SerialPoller(QThread):
     """后台串口轮询线程。
 
     线程连接硬件后按 1-16 通道循环发送读取命令，并通过信号把每个通道的
-    最新 16 路电流值推送给界面，避免串口等待阻塞 GUI。
+    最新 16 路光照强度值推送给界面，避免串口等待阻塞 GUI。
     """
 
     reading_received = Signal(int, object)
@@ -121,7 +121,7 @@ class SerialPoller(QThread):
                         self._emit_raw_response(channel, f"解析失败：{exc}", raw_bytes)
                         raise
                     self._emit_raw_response(channel, "解析成功", raw_bytes)
-                    self.reading_received.emit(reading.channel, reading.currents_ma)
+                    self.reading_received.emit(reading.channel, reading.illuminance_lux)
                 except TimeoutError as exc:
                     self._emit_raw_response(channel, str(exc), getattr(exc, "raw_bytes", b""))
                     self.error_occurred.emit(f"通道 {channel} 读取失败：{exc}")
