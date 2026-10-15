@@ -11,6 +11,9 @@ from led_debugger.waveform_protocol import ResponseParser, collect_command, ligh
 from led_debugger.serial_worker import RawSerialRecord
 
 
+COLLECTION_RECEIVE_GRACE_SECONDS = 3.0
+
+
 @dataclass(frozen=True)
 class WaveformPoint:
     channel: int
@@ -118,7 +121,7 @@ class WaveformWorker(QThread):
     def _collect(self, port) -> None:
         self._send(port, collect_command(self.channel, self.period_ms, self.point_count))
         self.status_changed.emit(f"状态：采集中，0 / {self.point_count} 点")
-        deadline = time.monotonic() + self.period_ms * self.point_count / 1000 + 3.0
+        deadline = time.monotonic() + self.period_ms * self.point_count / 1000 + COLLECTION_RECEIVE_GRACE_SECONDS
         first_sequence = None
         last_index = -1
         received_count = 0
@@ -150,6 +153,9 @@ class WaveformWorker(QThread):
                     failure = "设备拒绝采集指令"
                     break
             if points:
+                # 板卡可能先采完整批再逐点回传。有效进展继续续期，
+                # 杂数据和其他通道的响应不能让已停滞的采集一直等待。
+                deadline = max(deadline, time.monotonic() + COLLECTION_RECEIVE_GRACE_SECONDS)
                 self.points_received.emit(points)
                 self.status_changed.emit(f"状态：采集中，{received_count} / {self.point_count} 点")
             if failure:
