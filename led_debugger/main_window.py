@@ -34,6 +34,8 @@ from PySide6.QtWidgets import (
 )
 
 from led_debugger.data_store import DataStore
+from led_debugger.waveform_panel import WaveformPanel
+from led_debugger.waveform_worker import WaveformWorker
 from led_debugger.exporter import (
     default_data_dir,
     existing_export_files,
@@ -187,6 +189,8 @@ class MainWindow(QMainWindow):
         self.raw_serial_records: dict[int, RawSerialRecord] = {}
         self.continuous_recorder: ContinuousRecorder | None = None
         self.serial_poller: SerialPoller | None = None
+        self.waveform_worker: WaveformWorker | None = None
+        self._close_requested = False
         self.serial_error_count = 0
         self.setWindowTitle("LED亮度检测上位机")
         self.setWindowIcon(QIcon(str(APP_ICON_PATH)))
@@ -196,6 +200,7 @@ class MainWindow(QMainWindow):
         apply_native_title_bar_style(self)
         self._select_led(1)
         self._refresh_ports()
+        self._apply_operating_mode()
         QTimer.singleShot(0, self._auto_connect_last_port)
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt 事件函数沿用 Qt 命名。
@@ -227,6 +232,11 @@ class MainWindow(QMainWindow):
         self.connect_button.setFixedSize(92, 38)
         self.connect_button.clicked.connect(self._toggle_connection)
 
+        self.mode_combo = AcrylicSelectButton("亮度检测")
+        self.mode_combo.setFixedSize(146, 38)
+        self.mode_combo.set_items(["亮度检测", "光源波形"])
+        self.mode_combo.set_selection_changed_callback(self._change_operating_mode)
+
         self.status_label = ElidedLabel("状态：未连接")
         self.status_label.setObjectName("statusLabel")
 
@@ -241,6 +251,7 @@ class MainWindow(QMainWindow):
         self.settings_button.clicked.connect(self._open_settings)
 
         toolbar.addWidget(self.port_combo)
+        toolbar.addWidget(self.mode_combo)
         toolbar.addWidget(self.connect_button)
         toolbar.addWidget(self.status_label, 1)
         toolbar.addItem(QSpacerItem(20, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
@@ -323,6 +334,8 @@ class MainWindow(QMainWindow):
         self.page_stack.setObjectName("pageStack")
         self.page_stack.addWidget(self.monitor_view)
         self.page_stack.addWidget(self.settings_view)
+        self.waveform_view = WaveformPanel(self.settings)
+        self.page_stack.addWidget(self.waveform_view)
         root_layout.addWidget(self.page_stack, 1)
         self.setCentralWidget(root)
         # 样式集中在当前窗口内，后续如果界面复杂再拆分为独立 qss 文件。
@@ -547,6 +560,10 @@ class MainWindow(QMainWindow):
         self.advanced_settings_button.setFixedSize(178, 38)
         self.advanced_settings_button.setCheckable(True)
         self.advanced_settings_button.clicked.connect(lambda: self._set_settings_section(3))
+        self.waveform_settings_button = AcrylicTextButton("波形设置")
+        self.waveform_settings_button.setFixedSize(178, 38)
+        self.waveform_settings_button.setCheckable(True)
+        self.waveform_settings_button.clicked.connect(lambda: self._set_settings_section(4))
 
         side_layout.addWidget(title)
         side_layout.addSpacing(12)
@@ -554,6 +571,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(self.curve_settings_button)
         side_layout.addWidget(self.serial_settings_button)
         side_layout.addWidget(self.advanced_settings_button)
+        side_layout.addWidget(self.waveform_settings_button)
         side_layout.addStretch(1)
 
         settings_content = QWidget()
@@ -568,6 +586,7 @@ class MainWindow(QMainWindow):
         self.settings_page_stack.addWidget(self._wrap_settings_scroll(self._build_curve_settings_page()))
         self.settings_page_stack.addWidget(self._wrap_settings_scroll(self._build_serial_settings_page()))
         self.settings_page_stack.addWidget(self._wrap_settings_scroll(self._build_advanced_settings_page()))
+        self.settings_page_stack.addWidget(self._wrap_settings_scroll(self._build_waveform_settings_page()))
         content_layout.addWidget(self.settings_page_stack, 1)
 
         self.settings_hint = QLabel("")
@@ -612,6 +631,35 @@ class MainWindow(QMainWindow):
         scroll_area.viewport().setStyleSheet("background: transparent;")
         scroll_area.setWidget(page)
         return scroll_area
+
+    def _build_waveform_settings_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 14, 0)
+        layout.setSpacing(12)
+        title = QLabel("光源波形 · 单次采集设置")
+        title.setObjectName("settingsSectionTitle")
+        layout.addWidget(title)
+        self.waveform_channel_row = SettingInputRow(
+            "CHANNEL", "采集通道", "通道1对应设备目标0，通道2对应目标1。",
+            str(self.settings.waveform_channel + 1), QIntValidator(1, 2, self),
+        )
+        self.waveform_period_row = SettingInputRow(
+            "PERIOD_MS", "采样周期（毫秒）", "沿用仪器 0x50 协议，范围1到65535，默认15ms。",
+            str(self.settings.waveform_period_ms), QIntValidator(1, 65535, self),
+        )
+        self.waveform_count_row = SettingInputRow(
+            "POINT_COUNT", "单次采集点数", "范围1到65535。采满一次后关灯结束，不自动重复。默认206点。",
+            str(self.settings.waveform_point_count), QIntValidator(1, 65535, self),
+        )
+        for row in (self.waveform_channel_row, self.waveform_period_row, self.waveform_count_row):
+            self._add_settings_row(layout, row)
+        hint = QLabel("仅作用于光源波形模式。光源波形不会使用亮度检测的轮询间隔、lux单位或连续记录设置。数据保存包含本次全部已收到的有效点。")
+        hint.setWordWrap(True)
+        hint.setObjectName("settingsHint")
+        layout.addWidget(hint)
+        layout.addStretch(1)
+        return page
 
     def _build_curve_settings_page(self) -> QWidget:
         """构建曲线设置页。"""
@@ -914,11 +962,13 @@ class MainWindow(QMainWindow):
         self.curve_settings_button.setChecked(index == 1)
         self.serial_settings_button.setChecked(index == 2)
         self.advanced_settings_button.setChecked(index == 3)
+        self.waveform_settings_button.setChecked(index == 4)
         hints = {
             0: "常用设置保存后立即应用；自动连接会在下一次启动时生效。",
             1: "曲线显示设置保存后立即应用；清空曲线历史只影响当前通道和当前 LED。",
             2: "串口超时和轮询间隔会在下一次连接串口时生效。",
             3: "高级设置会影响历史缓存、保存数据和长时间运行的资源占用。",
+            4: "保存后在下次单次采集时生效。新组件允许的实际周期和点数以实机返回为准。",
         }
         self.settings_hint.setText(hints.get(index, ""))
 
@@ -1041,12 +1091,16 @@ class MainWindow(QMainWindow):
         self.continuous_recording_row.set_checked(settings.continuous_recording)
         self.auto_save_interval_row.set_checked(settings.auto_save_interval)
         self.auto_save_duration_row.set_checked(settings.auto_save_duration)
+        self.waveform_channel_row.set_value_text(str(settings.waveform_channel + 1))
+        self.waveform_period_row.set_value_text(str(settings.waveform_period_ms))
+        self.waveform_count_row.set_value_text(str(settings.waveform_point_count))
         self._update_auto_setting_input_states()
 
     def _show_monitor_page(self, status_text: str | None = None) -> None:
         """切回监测页面。"""
-        self.page_stack.setCurrentWidget(self.monitor_view)
+        self.page_stack.setCurrentWidget(self.waveform_view if self.settings.operating_mode == "waveform" else self.monitor_view)
         self.settings_button.setText("设置")
+        self._update_mode_controls()
         if status_text is not None:
             self.status_label.setText(status_text)
 
@@ -1092,6 +1146,8 @@ class MainWindow(QMainWindow):
 
     def _auto_connect_last_port(self) -> None:
         """启动后按设置自动连接上次串口。"""
+        if self.settings.operating_mode == "waveform":
+            return  # 波形模式需要用户明确开始，启动程序不自动点亮光源。
         if not self.settings.auto_connect_last_port or self.serial_poller is not None:
             return
 
@@ -1124,6 +1180,9 @@ class MainWindow(QMainWindow):
         self._populate_settings_inputs(self.settings)
         self.page_stack.setCurrentWidget(self.settings_view)
         self.settings_button.setText("返回")
+        self._update_mode_controls()
+        if self.settings.operating_mode == "waveform":
+            self._set_settings_section(4)
         self.status_label.setText("状态：正在修改设置")
 
     def _restore_default_settings_inputs(self) -> None:
@@ -1160,6 +1219,13 @@ class MainWindow(QMainWindow):
 
     def _export_data(self) -> None:
         """导出所有通道/LED 的历史数据到 Excel。"""
+        if self.settings.operating_mode == "waveform":
+            try:
+                path = self.waveform_view.save()
+                self.status_label.setText(f"状态：已保存 {len(self.waveform_view.points)} 点，到 {path}")
+            except (OSError, ValueError) as exc:
+                self.status_label.setText(f"状态：保存失败：{exc}")
+            return
         if self.settings.continuous_recording:
             if self.continuous_recorder is None:
                 self._start_continuous_recording()
@@ -1219,6 +1285,7 @@ class MainWindow(QMainWindow):
 
         self.export_button.setText("停止")
         self.settings_button.setEnabled(False)
+        self._update_mode_controls()
         self.status_label.setText(f"状态：连续记录中，共 0 行，到 {output_dir}")
 
     def _stop_continuous_recording(self) -> None:
@@ -1240,6 +1307,7 @@ class MainWindow(QMainWindow):
             self.export_button.setText("保存")
             self.export_button.setEnabled(True)
             self.settings_button.setEnabled(True)
+            self._update_mode_controls()
 
         self.status_label.setText(
             f"状态：连续记录完成 {summary.files_written} 个Excel，共 {summary.rows_written} 行，到 {summary.output_dir}"
@@ -1322,6 +1390,9 @@ class MainWindow(QMainWindow):
     def _settings_from_inputs(self) -> AppSettings | None:
         """从设置页输入框读取并校验参数。"""
         for row in (
+            self.waveform_channel_row,
+            self.waveform_period_row,
+            self.waveform_count_row,
             self.read_timeout_row,
             self.round_delay_row,
             self.channel_delay_row,
@@ -1420,6 +1491,11 @@ class MainWindow(QMainWindow):
             self.status_label.setText("状态：Y_AXIS_MIN 必须小于 Y_AXIS_MAX")
             self.y_axis_min_row.input.setFocus()
             return None
+        waveform_channel = self._parse_int_setting(self.waveform_channel_row, (1, 2), "CHANNEL")
+        waveform_period = self._parse_int_setting(self.waveform_period_row, (1, 65535), "PERIOD_MS")
+        waveform_count = self._parse_int_setting(self.waveform_count_row, (1, 65535), "POINT_COUNT")
+        if None in (waveform_channel, waveform_period, waveform_count):
+            return None
         timing_settings = AppSettings(
             round_delay_seconds=round_delay,
             channel_delay_seconds=channel_delay,
@@ -1462,6 +1538,10 @@ class MainWindow(QMainWindow):
             auto_save_duration=auto_save_duration,
             auto_curve_visible_seconds=auto_curve_visible_seconds,
             continuous_recording=continuous_recording,
+            operating_mode=self.settings.operating_mode,
+            waveform_channel=waveform_channel - 1,
+            waveform_period_ms=waveform_period,
+            waveform_point_count=waveform_count,
         )
 
     def _parse_float_setting(
@@ -1520,6 +1600,7 @@ class MainWindow(QMainWindow):
         self._apply_display_decimals()
         self._apply_curve_settings()
         self._apply_right_panel_mode()
+        self.waveform_view.apply_settings(self.settings)
 
     def _apply_display_decimals(self) -> None:
         """应用 LED 卡片显示小数位设置。"""
@@ -1551,6 +1632,9 @@ class MainWindow(QMainWindow):
 
     def _toggle_connection(self) -> None:
         """连接或断开串口轮询线程。"""
+        if self.settings.operating_mode == "waveform":
+            self._toggle_waveform()
+            return
         if self.serial_poller is not None:
             self._disconnect_serial()
             return
@@ -1580,6 +1664,7 @@ class MainWindow(QMainWindow):
         self.connect_button.setText("断开")
         self.status_label.setText(f"状态：连接中 {port_name}")
         self.serial_poller.start()
+        self._update_mode_controls()
 
     def _disconnect_serial(self) -> None:
         """停止串口线程，按钮状态在 finished 回调中恢复。"""
@@ -1611,8 +1696,12 @@ class MainWindow(QMainWindow):
             self.raw_serial_panel.set_record(record)
 
     def _handle_serial_error(self, message: str) -> None:
-        """显示串口错误；轮询线程仍会继续尝试后续通道。"""
+        """记录串口错误次数，按两个模式共用的格式显示。"""
         self.serial_error_count += 1
+        self._display_serial_error(message)
+
+    def _display_serial_error(self, message: str) -> None:
+        """两个模式共用错误前缀、次数和提示开关；重显不重复计数。"""
         if not self.settings.show_serial_errors:
             return
         self.status_label.setText(f"状态：{message} x {self.serial_error_count}")
@@ -1622,6 +1711,9 @@ class MainWindow(QMainWindow):
         self.serial_poller = None
         self.connect_button.setText("连接")
         self.connect_button.setEnabled(True)
+        self._update_mode_controls()
+        if self._close_requested:
+            QTimer.singleShot(0, self.close)
         if self.continuous_recorder is not None:
             self.status_label.setText("状态：串口已断开，连续记录暂停，点击停止生成Excel")
 
@@ -1638,12 +1730,108 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt 事件函数沿用 Qt 命名。
         """关闭窗口前停止后台串口线程，避免进程残留。"""
+        if self.waveform_worker is not None or self.serial_poller is not None:
+            self._close_requested = True
+            if self.waveform_worker is not None:
+                self.waveform_worker.stop()
+            if self.serial_poller is not None:
+                self.serial_poller.stop()
+            self.connect_button.setEnabled(False)
+            self.status_label.setText("状态：正在停止并关闭，请稍候...")
+            event.ignore()
+            return
         if self.continuous_recorder is not None:
             self.continuous_recorder.close()
-        if self.serial_poller is not None:
-            self.serial_poller.stop()
-            self.serial_poller.wait(1000)
         super().closeEvent(event)
+
+    def _change_operating_mode(self, label: str) -> None:
+        if self.serial_poller is not None or self.waveform_worker is not None or self.continuous_recorder is not None:
+            return
+        mode = "waveform" if label == "光源波形" else "brightness"
+        updated = replace(self.settings, operating_mode=mode)
+        try:
+            save_settings(updated)
+        except OSError as exc:
+            self.mode_combo.setText("光源波形" if self.settings.operating_mode == "waveform" else "亮度检测")
+            self.status_label.setText(f"状态：模式保存失败：{exc}")
+            return
+        self.settings = updated
+        self._apply_operating_mode()
+        self.status_label.setText(f"状态：已切换到{label}，请选择串口")
+
+    def _apply_operating_mode(self) -> None:
+        self.mode_combo.setText("光源波形" if self.settings.operating_mode == "waveform" else "亮度检测")
+        self._show_monitor_page()
+
+    def _update_mode_controls(self) -> None:
+        busy = self.serial_poller is not None or self.waveform_worker is not None
+        self.mode_combo.setEnabled(not busy and self.continuous_recorder is None and self.page_stack.currentWidget() != self.settings_view)
+        self.port_combo.setEnabled(not busy)
+        waveform = self.settings.operating_mode == "waveform"
+        if waveform:
+            self.connect_button.setText("停止采集" if self.waveform_worker is not None else "开始采集")
+            self.export_button.setText("保存本次")
+            self.export_button.setEnabled(self.waveform_worker is None)
+            self.settings_button.setEnabled(self.waveform_worker is None)
+        else:
+            self.connect_button.setText("断开" if self.serial_poller is not None else "连接")
+            self.export_button.setText("停止" if self.continuous_recorder is not None else "保存")
+
+    def _toggle_waveform(self) -> None:
+        if self.waveform_worker is not None:
+            self.waveform_worker.stop()
+            self.connect_button.setEnabled(False)
+            self.status_label.setText("状态：正在停止采集并关灯...")
+            return
+        self._refresh_ports()
+        port_name = self.port_combo.currentText()
+        if port_name not in self.available_ports:
+            self.status_label.setText("状态：请选择COM口")
+            return
+        if self.settings.remember_last_port:
+            self.settings = replace(self.settings, last_port_name=port_name)
+            save_settings(self.settings)
+        self._show_monitor_page()
+        self.waveform_view.reset_for_session(self.settings)
+        worker = WaveformWorker(port_name, self.settings.waveform_channel, self.settings.waveform_period_ms,
+                                self.settings.waveform_point_count, self)
+        self.waveform_worker = worker
+        worker.points_received.connect(self.waveform_view.add_points)
+        worker.raw_response_received.connect(self.waveform_view.set_raw_record)
+        worker.status_changed.connect(self.status_label.setText)
+        worker.error_occurred.connect(self._handle_waveform_error)
+        worker.finished.connect(self._handle_waveform_finished)
+        self._update_mode_controls()
+        self.status_label.setText(f"状态：正在连接 {port_name}")
+        worker.start()
+
+    def _handle_waveform_finished(self) -> None:
+        worker = self.waveform_worker
+        self.waveform_worker = None
+        self.connect_button.setEnabled(True)
+        self._update_mode_controls()
+        self.waveform_view.refresh_curve()
+        if worker.failure_message:
+            if self.settings.show_serial_errors:
+                self._display_serial_error(f"通道 {worker.channel + 1} 读取失败：{worker.failure_message}")
+            else:
+                summary = "采集已结束" if worker.completed else "采集未完成"
+                light = "已确认关灯" if worker.light_off_confirmed else "光源状态未确认"
+                self.status_label.setText(f"状态：{summary}，{light}")
+        elif worker.completed:
+            message = f"采集完成，共 {len(self.waveform_view.points)} 点，已确认关灯"
+            self.status_label.setText("状态：" + message)
+        else:
+            message = f"已手动停止，保留 {len(self.waveform_view.points)} 点" + ("，已确认关灯" if worker.light_off_confirmed else "")
+            self.status_label.setText("状态：" + message)
+        worker.deleteLater()
+        if self._close_requested:
+            if not worker.light_off_confirmed and worker.failure_message:
+                QMessageBox.warning(self, "光源状态未确认", worker.failure_message)
+            QTimer.singleShot(0, self.close)
+
+    def _handle_waveform_error(self, message: str) -> None:
+        self._handle_serial_error(f"通道 {self.settings.waveform_channel + 1} 读取失败：{message}")
 
 
 def run() -> int:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import QLabel, QPlainTextEdit, QVBoxLayout
 
 from led_debugger.serial_worker import RawSerialRecord
@@ -27,7 +28,8 @@ class RawSerialPanel(AcrylicPanel):
         self.text_box = QPlainTextEdit()
         self.text_box.setObjectName("rawSerialText")
         self.text_box.setReadOnly(True)
-        self.text_box.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.text_box.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.text_box.setWordWrapMode(QTextOption.WrapMode.WordWrap)
         self.text_box.setPlainText("暂无该通道返回数据")
 
         layout.addWidget(self.title)
@@ -51,7 +53,7 @@ class RawSerialPanel(AcrylicPanel):
 
         record = self.current_record
         timestamp_text = datetime.fromtimestamp(record.timestamp).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        hex_text = format_hex(record.raw_bytes)
+        hex_text = format_received_hex(record)
         self.text_box.setPlainText(
             "\n".join(
                 (
@@ -65,10 +67,31 @@ class RawSerialPanel(AcrylicPanel):
         )
 
 
-def format_hex(raw_bytes: bytes, bytes_per_line: int = 16) -> str:
-    """把原始字节格式化为多行 HEX。"""
+def format_received_hex(record: RawSerialRecord) -> str:
+    """完整返回之间硬换行；帧内部不插入换行，由控件按宽度折行。"""
+    segments = []
+    cursor = 0
+    for frame in record.response_frames:
+        if not frame:
+            continue
+        start = record.raw_bytes.find(frame, cursor)
+        if start < 0:
+            continue
+        if start > cursor:
+            segments.append(record.raw_bytes[cursor:start])
+        segments.append(frame)
+        cursor = start + len(frame)
+    if cursor < len(record.raw_bytes):
+        segments.append(record.raw_bytes[cursor:])
+    return "\n".join(format_hex(segment, bytes_per_line=None) for segment in segments)
+
+
+def format_hex(raw_bytes: bytes, bytes_per_line: int | None = 16) -> str:
+    """格式化HEX；None不插入硬换行，由控件按面板宽度换行。"""
     if not raw_bytes:
         return ""
+    if bytes_per_line is None:
+        return " ".join(f"{byte:02X}" for byte in raw_bytes)
     groups = []
     for start in range(0, len(raw_bytes), bytes_per_line):
         chunk = raw_bytes[start : start + bytes_per_line]

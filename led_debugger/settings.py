@@ -71,6 +71,10 @@ class AppSettings:
     auto_save_duration: bool = DEFAULT_AUTO_SAVE_DURATION
     auto_curve_visible_seconds: bool = DEFAULT_AUTO_CURVE_VISIBLE_SECONDS
     continuous_recording: bool = DEFAULT_CONTINUOUS_RECORDING
+    operating_mode: str = "brightness"
+    waveform_channel: int = 0
+    waveform_period_ms: int = 15
+    waveform_point_count: int = 206
 
 
 def load_settings(path: Path = SETTINGS_PATH) -> AppSettings:
@@ -118,6 +122,10 @@ def load_settings(path: Path = SETTINGS_PATH) -> AppSettings:
                 values.get("auto_curve_visible_seconds", DEFAULT_AUTO_CURVE_VISIBLE_SECONDS)
             ),
             continuous_recording=bool(values.get("continuous_recording", DEFAULT_CONTINUOUS_RECORDING)),
+            operating_mode=str(values.get("operating_mode", "brightness")),
+            waveform_channel=int(values.get("waveform_channel", 0)),
+            waveform_period_ms=int(values.get("waveform_period_ms", 15)),
+            waveform_point_count=int(values.get("waveform_point_count", 206)),
         )
     except (TypeError, ValueError):
         return AppSettings()
@@ -157,6 +165,10 @@ def normalize_settings(settings: AppSettings) -> AppSettings:
         auto_save_duration=bool(settings.auto_save_duration),
         auto_curve_visible_seconds=bool(settings.auto_curve_visible_seconds),
         continuous_recording=bool(settings.continuous_recording),
+        operating_mode=settings.operating_mode if settings.operating_mode in ("brightness", "waveform") else "brightness",
+        waveform_channel=_clamp_int(settings.waveform_channel, (0, 1)),
+        waveform_period_ms=_clamp_int(settings.waveform_period_ms, (1, 65535)),
+        waveform_point_count=_clamp_int(settings.waveform_point_count, (1, 65535)),
     )
 
 

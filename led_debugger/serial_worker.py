@@ -38,6 +38,7 @@ class RawSerialRecord:
     timestamp: float
     status: str
     raw_bytes: bytes
+    response_frames: tuple[bytes, ...] = ()
 
 
 class SerialReadTimeout(TimeoutError):
